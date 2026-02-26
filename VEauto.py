@@ -10,8 +10,8 @@ ctk.set_default_color_theme("blue")
 class AutoCleanApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("AutoClean Contábil Pro")
-        self.geometry("600x500")
+        self.title("AutoClean Contábil")
+        self.geometry("550x400")
         
         # Elementos da Interface
         self.label = ctk.CTkLabel(self, text="Limpeza de Razão Contábil", font=("Roboto", 22, "bold"))
