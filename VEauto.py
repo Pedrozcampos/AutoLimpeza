@@ -1,66 +1,113 @@
 import pandas as pd
-import numpy as np
+import customtkinter as ctk
+from tkinter import filedialog, messagebox
 import re
+import os
 
-def limpar_extrato_contabil(caminho_arquivo, caminho_saida):
-    """
-    Processa arquivos Excel contábeis, extraindo contas de cabeçalhos 
-    e normalizando as colunas de Débito, Crédito e Histórico.
-    """
-    
-    # 1. Carregamento (Tratando possíveis variações de colunas)
-    # Nota: Se for .xlsx, use engine='openpyxl'
-    df_raw = pd.read_csv(caminho_arquivo) 
-    
-    # Lista para armazenar as linhas processadas
-    dados_limpos = []
-    conta_atual = None
-    
-    # 2. Processamento Linha a Linha (Lógica de Identificação de Conta)
-    for _, linha in df_raw.iterrows():
-        # Converte a linha inteira em string para buscar o padrão "Conta"
-        linha_str = " ".join([str(val) for val in linha.values]).lower()
-        
-        # Identifica se a linha é um cabeçalho de nova conta
-        if 'conta' in linha_str or 'conta analitica' in linha_str:
-            # Extrai o nome da conta (ajuste o índice se a conta estiver em coluna específica)
-            # Aqui pegamos o conteúdo após "Nome:" ou após o código da conta
-            conta_atual = linha_str.strip() 
-            continue
-            
-        # 3. Filtro de Transações
-        # Só processa se tivermos uma conta ativa e se a linha parecer uma transação (tem data)
-        data_valor = str(linha.get('Data', ''))
-        if conta_atual and re.search(r'\d{4}-\d{2}-\d{2}', data_valor):
-            nova_linha = {
-                'Data': linha.get('Data'),
-                'Lote': linha.get('Lote'),
-                'Sq': linha.get('Sq'),
-                'Contra Partida': linha.get('Contra Partida'),
-                'Nro. Doc.': linha.get('Nro. Doc.'),
-                'Histórico': linha.get('Histórico'),
-                'Origem': linha.get('Origem'),
-                'Débito': linha.get('Débito'),
-                'Crédito': linha.get('Crédito'),
-                'Conta': conta_atual
-            }
-            dados_limpos.append(nova_linha)
+# Configuração visual da interface
+ctk.set_appearance_mode("System")
+ctk.set_default_color_theme("blue")
 
-    # 4. Criação do DataFrame Final
-    df_final = pd.DataFrame(dados_limpos)
+class App(ctk.CTk):
+    def __init__(self):
+        super().__init__()
 
-    # 5. Higienização de Valores Numéricos
-    # Garante que Débito e Crédito sejam números, preenchendo vazios com 0
-    for col in ['Débito', 'Crédito']:
-        if col in df_final.columns:
-            df_final[col] = pd.to_numeric(df_final[col], errors='coerce').fillna(0)
+        self.title("AutoClean Contábil - Gemini Edition")
+        self.geometry("500x300")
 
-    # 6. Exportação
-    df_final.to_csv(caminho_saida, index=False, encoding='utf-8-sig')
-    print(f"Processamento concluído! Arquivo salvo em: {caminho_saida}")
+        # Elementos da Interface
+        self.label = ctk.CTkLabel(self, text="Conversor de Extratos Contábeis", font=("Roboto", 20))
+        self.label.pack(pady=20)
 
-# Exemplo de uso
+        self.btn_selecionar = ctk.CTkButton(self, text="Selecionar Arquivo (Excel/CSV)", command=self.processar_arquivo)
+        self.btn_selecionar.pack(pady=10)
+
+        self.status_label = ctk.CTkLabel(self, text="Aguardando arquivo...", text_color="gray")
+        self.status_label.pack(pady=20)
+
+    def processar_arquivo(self):
+        caminho_input = filedialog.askopenfilename(
+            filetypes=[("Arquivos de Excel", "*.xlsx *.xls"), ("Arquivos CSV", "*.csv")]
+        )
+
+        if not caminho_input:
+            return
+
+        try:
+            self.status_label.configure(text="Processando... aguarde.", text_color="yellow")
+            self.update()
+
+            # 1. Carregamento inteligente
+            if caminho_input.endswith('.csv'):
+                df_raw = pd.read_csv(caminho_input, sep=None, engine='python', encoding='utf-8-sig')
+            else:
+                df_raw = pd.read_excel(caminho_input)
+
+            dados_limpos = []
+            conta_atual = "Não Identificada"
+
+            # 2. Algoritmo de Extração e Limpeza
+            for _, linha in df_raw.iterrows():
+                # Transforma a linha em string para busca
+                linha_texto = " ".join([str(v) for v in linha.values]).strip()
+                linha_texto_lower = linha_texto.lower()
+
+                # Identifica troca de conta (Conta ou Conta Analitica)
+                if linha_texto_lower.startswith(('conta', 'conta analitica')):
+                    conta_atual = linha_texto
+                    continue
+
+                # Pula linhas de saldo ou vazias
+                if "saldo anterior" in linha_texto_lower or pd.isna(linha.get('Data')):
+                    continue
+
+                # Valida se a linha é uma transação (se tem data no formato esperado)
+                data_str = str(linha.get('Data'))
+                if re.search(r'\d', data_str): # Verifica se contém números (data)
+                    nova_linha = {
+                        'Data': linha.get('Data'),
+                        'Lote': linha.get('Lote'),
+                        'Sq': linha.get('Sq'),
+                        'Contra Partida': linha.get('Contra Partida'),
+                        'Nro. Doc.': linha.get('Nro. Doc.'),
+                        'Histórico': linha.get('Histórico'),
+                        'Origem': linha.get('Origem'),
+                        'Débito': self.limpar_valor(linha.get('Débito')),
+                        'Crédito': self.limpar_valor(linha.get('Crédito')),
+                        'Conta': conta_atual
+                    }
+                    dados_limpos.append(nova_linha)
+
+            # 3. Gerar DataFrame Final
+            df_final = pd.DataFrame(dados_limpos)
+
+            # 4. Salvar Resultado
+            caminho_saida = filedialog.asksaveasfilename(
+                defaultextension=".xlsx",
+                filetypes=[("Excel workbook", "*.xlsx")],
+                initialfile="Extrato_Limpo.xlsx"
+            )
+
+            if caminho_saida:
+                df_final.to_excel(caminho_saida, index=False)
+                self.status_label.configure(text="Sucesso! Arquivo salvo.", text_color="green")
+                messagebox.showinfo("Concluído", f"Arquivo processado com sucesso!\nSalvo em: {caminho_saida}")
+            else:
+                self.status_label.configure(text="Operação cancelada.", text_color="white")
+
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao processar: {str(e)}")
+            self.status_label.configure(text="Erro no processamento.", text_color="red")
+
+    def limpar_valor(self, valor):
+        """Converte valores contábeis (string com vírgula) para float."""
+        if pd.isna(valor) or valor == "" or valor == " ":
+            return 0.0
+        if isinstance(valor, str):
+            valor = valor.replace('.', '').replace(',', '.')
+            valor = re.sub(r'[^\d.]', '', valor)
+        return float(valor) if valor else 0.0
+
 if __name__ == "__main__":
-    arquivo_input = 'comoe.xlsx - Planilha1.csv'
-    arquivo_output = 'extrato_limpo_final.csv'
-    limpar_extrato_contabil(arquivo_input, arquivo_output)
+    app = App()
+    app.mainloop()
