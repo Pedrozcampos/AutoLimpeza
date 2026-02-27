@@ -12,7 +12,7 @@ Esta automação utiliza **Pandas** e **Regex** para:
 4.  **Limpeza Numérica:** Converte automaticamente formatos de moeda brasileiros (1.250,00) para formatos computacionais (1250.00).
 
 ## Tecnologias Utilizadas
-* **- Python -**
+* **Python**: Principal Tecnologia.
 * **Pandas**: Processamento e manipulação de dados.
 * **CustomTkinter**: Interface gráfica.
 * **Openpyxl**: Engine para leitura e escrita de arquivos Excel (.xlsx).
