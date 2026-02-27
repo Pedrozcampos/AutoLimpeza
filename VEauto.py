@@ -19,15 +19,15 @@ class AutoCleanApp(ctk.CTk):
         # --- interface do gui ---
         self.label = ctk.CTkLabel(self, text="Limpeza de Razão Contábil", font=("Roboto", 22, "bold"))
         self.label.pack(pady=30)
-
+        
         self.btn_process = ctk.CTkButton(self, text="Selecionar Arquivo Excel ou CSV", 
                                         height=50, width=300, font=("Roboto", 14, "bold"),
                                         command=self.run_process)
         self.btn_process.pack(pady=30)
-
+        
         self.status = ctk.CTkLabel(self, text="Status: Aguardando seleção...", text_color="gray")
         self.status.pack(pady=10)
-
+        
         # - Barra de progresso
         self.progress_bar = ctk.CTkProgressBar(self, width=400)
         self.progress_bar.pack(pady=10)
@@ -36,14 +36,14 @@ class AutoCleanApp(ctk.CTk):
     def update_progress(self, value, label_text=None):
         # - Atualiza o valor da barra
         self.progress_bar.set(value)
-        
+
         # - Se um texto específico for enviado, usa ele. 
         # - Caso contrário, só atualiza a porcentagem se o processo já tiver começado (>0)
         if label_text:
             self.status.configure(text=label_text)
         elif value > 0 and value < 1.0:
             self.status.configure(text=f"Processando... {int(value*100)}%")
-        
+            
         self.update_idletasks()
 
     def extrair_conta(self, linha_texto):
@@ -52,7 +52,7 @@ class AutoCleanApp(ctk.CTk):
         # - Busca sequência numérica (código).
         cod_match = re.search(r'(\d{5,})', texto)
         nome_match = re.search(r'Nome:\s*(.*)', texto, re.IGNORECASE)
-
+        
         if cod_match and nome_match:
             return f"{cod_match.group(1)} - {nome_match.group(1).strip()}"
         return texto
@@ -74,30 +74,30 @@ class AutoCleanApp(ctk.CTk):
         try:
             # Inicia o visual do processamento apenas após o arquivo ser selecionado
             self.update_progress(0.05, "Status: Carregando arquivo...")
-
+            
             # - Carregamento do arquivo.
             if file_path.endswith('.csv'):
                 df_raw = pd.read_csv(file_path, sep=None, engine='python', encoding='utf-8-sig')
             else:
                 df_raw = pd.read_excel(file_path)
-
+            
             dados_finais = []
             conta_ativa = ""
-
+            
             # - Mapeia colunas existentes.
             colunas_existentes = [c for c in df_raw.columns if "Unnamed" not in str(c)]
             
             total_linhas = len(df_raw)
-
+            
             for i, row in df_raw.iterrows():
                 # Atualiza a barra dinamicamente baseada nas linhas (0.1 a 0.8 do progresso)
                 if i % 50 == 0:
                     prog_iter = 0.1 + (i / total_linhas) * 0.7
                     self.update_progress(prog_iter)
-
+                    
                 # - Transforma a linha em texto para detectar a conta.
                 linha_texto = " ".join([str(v) for v in row.values if pd.notna(v)])
-
+                
                 # - Detecta nova conta no cabeçalho.
                 if 'conta' in linha_texto.lower():
                     conta_ativa = self.extrair_conta(linha_texto)
@@ -118,9 +118,9 @@ class AutoCleanApp(ctk.CTk):
                     if 'Crédito' in linha_dict: linha_dict['Crédito'] = self.limpar_num(linha_dict['Crédito'])
                     
                     dados_finais.append(linha_dict)
-
+                    
             self.update_progress(0.9, "Status: Organizando planilhas...")
-
+            
             # --- Montagem do DataFrame Final ---
             df_res = pd.DataFrame(dados_finais)
 
@@ -133,7 +133,7 @@ class AutoCleanApp(ctk.CTk):
             # - Organiza: Obrigatórias primeiro, Extras depois.
             outras_cols = [c for c in df_res.columns if c not in obrigatorias]
             df_res = df_res[obrigatorias + outras_cols]
-
+            
             # - Salva o resultado.
             save_path = filedialog.asksaveasfilename(defaultextension=".xlsx", 
                                                     filetypes=[("Excel", "*.xlsx")])
